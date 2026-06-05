@@ -1,0 +1,128 @@
+// Modul WebSocket (RFC 6455) untuk Tenun.
+// Server: builtin layaniSoket(port) memanggil fungsi koneksi(soket) per koneksi.
+// Modul ini sediakan handshake + baca/tulis frame. Dibangun di atas builtin:
+// terima/terimaPasti/kirim/tutup, sha1Raw, base64, xor, keByte, bacaInt, potong, cari.
+
+biar WS_GUID: teks = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+// Ambil nilai header Sec-WebSocket-Key dari teks permintaan.
+fungsi ws_kunci(req: teks): teks {
+    biar p: bulat = cari(req, "Sec-WebSocket-Key:");
+    kalau p < 0 {
+        kembali "";
+    }
+    biar sisa: teks = potong(req, p + 18, panjangTeks(req) - (p + 18));
+    biar e: bulat = cari(sisa, "\r\n");
+    kalau e < 0 {
+        kembali "";
+    }
+    biar k: teks = potong(sisa, 0, e);
+    selama mulaiDengan(k, " ") {
+        k = potong(k, 1, panjangTeks(k) - 1);
+    }
+    kembali k;
+}
+
+// Baca permintaan upgrade lalu balas 101. Kembalikan benar bila berhasil.
+fungsi ws_terima_handshake(soket: bulat): bool {
+    biar req: teks = terima(soket, 8192);
+    biar kunci: teks = ws_kunci(req);
+    kalau panjangTeks(kunci) == 0 {
+        kembali salah;
+    }
+    biar terimaKunci: teks = base64(sha1Raw(kunci + WS_GUID));
+    biar resp: teks = "HTTP/1.1 101 Switching Protocols\r\n";
+    resp = resp + "Upgrade: websocket\r\n";
+    resp = resp + "Connection: Upgrade\r\n";
+    resp = resp + "Sec-WebSocket-Accept: " + terimaKunci + "\r\n\r\n";
+    kirim(soket, resp);
+    kembali benar;
+}
+
+// Bangun kunci mask berulang sepanjang `len` (untuk unmask via xor).
+fungsi ws_ulang_kunci(mask: teks, len: bulat): teks {
+    biar k: teks = "";
+    selama panjangTeks(k) < len {
+        k = k + mask;
+    }
+    kembali potong(k, 0, len);
+}
+
+// Kirim satu frame (opcode + payload). Server tidak mem-mask.
+fungsi ws_bingkai(soket: bulat, opcode: bulat, payload: teks): kosong {
+    biar len: bulat = panjangTeks(payload);
+    biar bingkai: teks = keByte(128 + opcode, 1, salah);   // FIN=1
+    kalau len < 126 {
+        bingkai = bingkai + keByte(len, 1, salah);
+    } lain {
+        kalau len < 65536 {
+            bingkai = bingkai + keByte(126, 1, salah) + keByte(len, 2, benar);
+        } lain {
+            bingkai = bingkai + keByte(127, 1, salah) + keByte(len, 8, benar);
+        }
+    }
+    kirim(soket, bingkai + payload);
+}
+
+// Kirim pesan teks.
+fungsi ws_kirim(soket: bulat, pesan: teks): kosong {
+    ws_bingkai(soket, 1, pesan);
+}
+
+// Kirim data biner.
+fungsi ws_kirim_biner(soket: bulat, data: teks): kosong {
+    ws_bingkai(soket, 2, data);
+}
+
+// Tutup koneksi WebSocket (kirim frame close lalu tutup soket).
+fungsi ws_tutup(soket: bulat): kosong {
+    ws_bingkai(soket, 8, "");
+    tutup(soket);
+}
+
+// Baca satu pesan (data frame). Kembalikan payload; "" bila ditutup/galat.
+// Frame ping dibalas pong otomatis lalu lanjut membaca.
+fungsi ws_baca(soket: bulat): teks {
+    biar h: teks = terimaPasti(soket, 2);
+    kalau panjangTeks(h) < 2 {
+        kembali "";
+    }
+    biar b0: bulat = bacaInt(h, 0, 1, salah);
+    biar b1: bulat = bacaInt(h, 1, 1, salah);
+    biar opcode: bulat = b0 % 16;
+    biar masked: bool = b1 >= 128;
+    biar len: bulat = b1 % 128;
+
+    kalau len == 126 {
+        biar e2: teks = terimaPasti(soket, 2);
+        len = bacaInt(e2, 0, 2, benar);
+    }
+    kalau len == 127 {
+        biar e8: teks = terimaPasti(soket, 8);
+        len = bacaInt(e8, 0, 8, benar);
+    }
+
+    biar mask: teks = "";
+    kalau masked {
+        mask = terimaPasti(soket, 4);
+    }
+    biar payload: teks = "";
+    kalau len > 0 {
+        payload = terimaPasti(soket, len);
+    }
+    kalau masked {
+        payload = xor(payload, ws_ulang_kunci(mask, len));
+    }
+
+    kalau opcode == 8 {
+        kembali "";                       // close
+    }
+    kalau opcode == 9 {
+        ws_bingkai(soket, 10, payload);   // ping -> pong
+        kembali ws_baca(soket);
+    }
+    kalau opcode == 10 {
+        kembali ws_baca(soket);           // pong, abaikan
+    }
+    kembali payload;
+}

@@ -1,0 +1,10 @@
+{
+  "nama": "websocket",
+  "versi": "0.1.0",
+  "deskripsi": "Server WebSocket (RFC 6455) untuk Tenun: handshake + frame teks/biner/ping.",
+  "lisensi": "MIT",
+  "penulis": "TenunLang",
+  "berkas": "src/websocket.tenun",
+  "kataKunci": ["websocket", "ws", "realtime", "soket", "rfc6455"],
+  "butuh": {}
+}

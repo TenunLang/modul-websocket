@@ -1,0 +1,22 @@
+impor "websocket";
+
+// Server echo WebSocket. Jalankan: tenun run contoh/contoh.tenun
+// Lalu sambungkan dari browser:
+//   biar ws = new WebSocket("ws://localhost:8090");
+//   ws.onmessage = (e) => console.log(e.data);
+//   ws.onopen = () => ws.send("halo");
+
+fungsi koneksi(soket: bulat): kosong {
+    kalau ws_terima_handshake(soket) {
+        ws_kirim(soket, "selamat datang di Tenun WebSocket");
+        selama benar {
+            biar pesan: teks = ws_baca(soket);
+            kalau panjangTeks(pesan) == 0 {
+                kembali;                       // koneksi ditutup
+            }
+            ws_kirim(soket, "echo: " + pesan);
+        }
+    }
+}
+
+layaniSoket(8090);

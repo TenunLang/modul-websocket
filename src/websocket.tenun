@@ -48,8 +48,8 @@ fungsi ws_ulang_kunci(mask: teks, len: bulat): teks {
     kembali potong(k, 0, len);
 }
 
-// Kirim satu frame (opcode + payload). Server tidak mem-mask.
-fungsi ws_bingkai(soket: bulat, opcode: bulat, payload: teks): kosong {
+// Bangun byte frame (opcode + payload), tanpa mask (server->klien). Tidak mengirim.
+fungsi ws_frame(opcode: bulat, payload: teks): teks {
     biar len: bulat = panjangTeks(payload);
     biar bingkai: teks = keByte(128 + opcode, 1, salah);   // FIN=1
     kalau len < 126 {
@@ -61,7 +61,12 @@ fungsi ws_bingkai(soket: bulat, opcode: bulat, payload: teks): kosong {
             bingkai = bingkai + keByte(127, 1, salah) + keByte(len, 8, benar);
         }
     }
-    kirim(soket, bingkai + payload);
+    kembali bingkai + payload;
+}
+
+// Kirim satu frame ke satu soket.
+fungsi ws_bingkai(soket: bulat, opcode: bulat, payload: teks): kosong {
+    kirim(soket, ws_frame(opcode, payload));
 }
 
 // Kirim pesan teks.
@@ -78,6 +83,11 @@ fungsi ws_kirim_biner(soket: bulat, data: teks): kosong {
 fungsi ws_tutup(soket: bulat): kosong {
     ws_bingkai(soket, 8, "");
     tutup(soket);
+}
+
+// Siarkan pesan teks ke SEMUA koneksi WebSocket aktif (broadcast).
+fungsi ws_siar(pesan: teks): kosong {
+    siarkan(ws_frame(1, pesan));
 }
 
 // Baca satu pesan (data frame). Kembalikan payload; "" bila ditutup/galat.

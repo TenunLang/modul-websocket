@@ -1,0 +1,2 @@
+impor "../src/websocket.tenun";
+tegasSamaBulat(panjangTeks(ws_frame(1, "hi")), 4, "frame teks 2 byte header + payload");

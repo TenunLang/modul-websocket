@@ -20,3 +20,5 @@ jobs:
           printf 'impor "websocket";\n' > cek.tenun
           "$HOME/.tenun/bin/tenun" run cek.tenun
           echo "modul websocket valid"
+      - name: Uji unit
+        run: "$HOME/.tenun/bin/tenun" check .
